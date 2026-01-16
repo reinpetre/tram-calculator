@@ -1,0 +1,1685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OTIV Autonomous Tram Calculator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            font-family: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        input:focus, select:focus, textarea:focus {
+            border-color: #3B82F6 !important;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+        }
+        input:hover, select:hover, textarea:hover {
+            border-color: #9CA3AF !important;
+        }
+        button {
+            transition: all 0.2s ease !important;
+        }
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        ::placeholder {
+            color: #9CA3AF;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div id="otiv-calculator-root"></div>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script type="text/babel">
+        const { useState, useMemo } = React;
+        const URL = 'https://script.google.com/macros/s/AKfycbxZ77UeKJ6c1hLQ_JKmgKIyEiPZTY2nY__Y49SrjfXJv_HvrIUyfGVL22eiVOQ8hnaL6A/exec';
+        const PASS = 'OTIV_PRIVATE';
+
+        function App() {
+            const [page, setPage] = useState('input');
+            const [subId, setSubId] = useState(null);
+            const [edit, setEdit] = useState(false);
+            const [saved, setSaved] = useState(false);
+            const [form, setForm] = useState({
+                operatorName: '',
+                currency: 'EUR',
+                contactName: '',
+                email: '',
+                phone: '',
+                annualBudget: '',
+                OEM: '',
+                totalDrivers: '0',
+                avgDriverSalary: '0',
+                driverTrainingCost: '0',
+                absenteeismRate: '0',
+                supportPersonnel: '0',
+                supportSalary: '0',
+                fleetSize: '0',
+                avgKmPerVehicle: '0',
+                avgSpeed: '0',
+                avgRouteTime: '0',
+                driverBreakTime: '0',
+                networkLength: '0',
+                avgLineLength: '0',
+                tramCost: '0',
+                depreciationPeriod: '0',
+                maintenanceCostPercent: '0',
+                energyCost: '',
+                energyConsumption: '',
+                insuranceCosts: '0',
+                annualAccidents: '0',
+                accidentCost: '0',
+                placesKm: '0',
+                otherCost1Name: '',
+                otherCost1Amount: '0',
+                otherCost2Name: '',
+                otherCost2Amount: '0',
+                otherCost3Name: '',
+                otherCost3Amount: '0',
+                otherCost4Name: '',
+                otherCost4Amount: '0',
+                otherCost5Name: '',
+                otherCost5Amount: '0'
+            });
+
+            const [impact, setImpact] = useState({
+                driverElimination: '',
+                additionalSupport: '',
+                breakTimeEliminated: '',
+                energyReduction: '',
+                accidentReduction: '',
+                insuranceReduction: '',
+                maintenanceReduction: '',
+                otherCost1Impact: '',
+                otherCost2Impact: '',
+                otherCost3Impact: '',
+                otherCost4Impact: '',
+                otherCost5Impact: ''
+            });
+
+            const [masterPass, setMasterPass] = useState('');
+            const [masterAuth, setMasterAuth] = useState(false);
+            const [masterErr, setMasterErr] = useState(false);
+            const [subs, setSubs] = useState([]);
+            const [loading, setLoading] = useState(false);
+
+            const fmt = v => {
+                if (!v || v === '') return '';
+                const n = parseFloat(v.toString().replace(/,/g, ''));
+                return isNaN(n) ? '' : n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+            };
+
+            const hChange = e => {
+                const { name, value } = e.target;
+                const inputType = e.target.getAttribute('inputmode');
+
+                if (inputType === 'decimal' || inputType === 'numeric') {
+                    // Remove commas and other non-numeric characters (except decimal point and minus)
+                    // Allow decimal points and partial numbers while typing
+                    const cleaned = value.replace(/[^\d.-]/g, '');
+                    // Prevent multiple decimal points
+                    const parts = cleaned.split('.');
+                    const finalValue = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : cleaned;
+                    setForm({ ...form, [name]: finalValue });
+                } else {
+                    setForm({ ...form, [name]: value });
+                }
+            };
+
+            const hBlur = e => {
+                const { name, value } = e.target;
+                const inputType = e.target.getAttribute('inputmode');
+
+                if ((inputType === 'decimal' || inputType === 'numeric') && value) {
+                    // Clean and format the value
+                    const cleaned = value.replace(/[^\d.-]/g, '');
+                    const num = parseFloat(cleaned);
+                    if (!isNaN(num)) {
+                        // Format with thousand separators
+                        const formatted = num.toLocaleString('en-US', {
+                            maximumFractionDigits: 2,
+                            minimumFractionDigits: 0
+                        });
+                        setForm({ ...form, [name]: formatted });
+                    }
+                }
+            };
+
+            const hFocus = e => {
+                const inputType = e.target.getAttribute('inputmode');
+                // When focusing on a number input, select all text for easy editing
+                if (inputType === 'decimal' || inputType === 'numeric') {
+                    e.target.select();
+                }
+            };
+
+            // Helper to format value for display in inputs
+            const getDisplayValue = (value) => {
+                if (!value || value === '' || value === '0') return value;
+
+                // Format with thousand separators
+                const num = parseFloat(value);
+                if (isNaN(num)) return value;
+
+                return num.toLocaleString('en-US', {
+                    maximumFractionDigits: 2,
+                    minimumFractionDigits: 0
+                });
+            };
+
+            const hImpact = e => {
+                const { name, value } = e.target;
+                const inputType = e.target.getAttribute('inputmode');
+
+                if (inputType === 'decimal' || inputType === 'numeric') {
+                    // Remove commas and other non-numeric characters (except decimal point and minus)
+                    const cleaned = value.replace(/[^\d.-]/g, '');
+                    // Prevent multiple decimal points
+                    const parts = cleaned.split('.');
+                    const finalValue = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : cleaned;
+                    setImpact({ ...impact, [name]: finalValue });
+                } else {
+                    setImpact({ ...impact, [name]: value });
+                }
+            };
+
+            const hImpactBlur = e => {
+                const { name, value } = e.target;
+                const inputType = e.target.getAttribute('inputmode');
+
+                if ((inputType === 'decimal' || inputType === 'numeric') && value) {
+                    // Clean and format the value
+                    const cleaned = value.replace(/[^\d.-]/g, '');
+                    const num = parseFloat(cleaned);
+                    if (!isNaN(num)) {
+                        // Format with thousand separators
+                        const formatted = num.toLocaleString('en-US', {
+                            maximumFractionDigits: 2,
+                            minimumFractionDigits: 0
+                        });
+                        setImpact({ ...impact, [name]: formatted });
+                    }
+                }
+            };
+
+            const fmtNum = n => n ? parseFloat(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
+
+            // Helper to parse formatted numbers (removes commas)
+            const parseNum = (value) => {
+                if (!value || value === '') return 0;
+                const cleaned = value.toString().replace(/[^\d.-]/g, '');
+                return parseFloat(cleaned) || 0;
+            };
+
+            // Get currency symbol based on currency code
+            const getCurrencySymbol = (currencyCode) => {
+                const symbols = {
+                    'EUR': '€', 'GBP': '£', 'CHF': 'CHF', 'SEK': 'kr', 'NOK': 'kr', 'DKK': 'kr',
+                    'PLN': 'zł', 'CZK': 'Kč', 'HUF': 'Ft', 'RON': 'lei', 'BGN': 'лв', 'HRK': 'kn',
+                    'ISK': 'kr', 'TRY': '₺', 'USD': '$', 'CAD': 'C$', 'MXN': 'Mex$', 'BRL': 'R$',
+                    'ARS': 'AR$', 'CLP': 'CLP$', 'COP': 'COL$', 'PEN': 'S/', 'UYU': 'UY$', 'BOB': 'Bs'
+                };
+                return symbols[currencyCode] || currencyCode;
+            };
+
+            const currencySymbol = getCurrencySymbol(form.currency);
+
+            const calcCur = () => {
+                const fs = parseNum(form.fleetSize) || 0;
+                const km = parseNum(form.avgKmPerVehicle) || 0;
+                const tot = fs * km;
+                const dr = parseNum(form.totalDrivers) || 0;
+                const sal = parseNum(form.avgDriverSalary) || 0;
+                const tr = parseNum(form.driverTrainingCost) || 0;
+                const tc = parseNum(form.tramCost) || 0;
+                const dy = parseNum(form.depreciationPeriod) || 1;
+                const mp = parseNum(form.maintenanceCostPercent) / 100 || 0;
+                const ec = form.energyCost === '' ? 0.17 : parseNum(form.energyCost) || 0;
+                const en = form.energyConsumption === '' ? 3.82 : parseNum(form.energyConsumption) || 0;
+                const ic = parseNum(form.insuranceCosts) || 0;
+                const aa = parseNum(form.annualAccidents) || 0;
+                const ac = parseNum(form.accidentCost) || 0;
+                const dck = tot > 0 ? ((dr * sal * 12) + (dr * tr)) / tot : 0;
+                const kpd = fs > 0 ? (tot / (fs * 365)) : 0;
+                const mck = kpd > 0 ? (mp * tc) / (kpd * 365) : 0;
+                const rck = kpd > 0 ? tc / (dy * 365 * kpd) : 0;
+                const eck = ec * en;
+                const ack = tot > 0 ? (aa * ac) / tot : 0;
+                const ick = tot > 0 ? ic / tot : 0;
+                const o1 = tot > 0 ? parseNum(form.otherCost1Amount) / tot : 0;
+                const o2 = tot > 0 ? parseNum(form.otherCost2Amount) / tot : 0;
+                const o3 = tot > 0 ? parseNum(form.otherCost3Amount) / tot : 0;
+                const o4 = tot > 0 ? parseNum(form.otherCost4Amount) / tot : 0;
+                const o5 = tot > 0 ? parseNum(form.otherCost5Amount) / tot : 0;
+                const tck = dck + mck + rck + eck + ack + ick + o1 + o2 + o3 + o4 + o5;
+
+                return {
+                    driverCostPerKm: dck,
+                    maintenanceCostPerKm: mck,
+                    rollingStockCostPerKm: rck,
+                    energyCostPerKm: eck,
+                    accidentCostPerKm: ack,
+                    insuranceCostPerKm: ick,
+                    otherCost1PerKm: o1,
+                    otherCost2PerKm: o2,
+                    otherCost3PerKm: o3,
+                    otherCost4PerKm: o4,
+                    otherCost5PerKm: o5,
+                    totalCurrentPerKm: tck,
+                    totalCurrentAnnual: tck * tot,
+                    kmPerTramPerDay: kpd,
+                    totalKm: tot
+                };
+            };
+
+            const calcAuto = () => {
+                const cur = calcCur();
+                const tot = cur.totalKm;
+                const fs = parseNum(form.fleetSize) || 0;
+                const rt = parseNum(form.avgRouteTime) || 1;
+                const bt = parseNum(impact.breakTimeEliminated) || 0;
+                const sp = parseNum(form.supportPersonnel) || 0;
+                const ss = parseNum(form.supportSalary) || 0;
+                const as = parseNum(impact.additionalSupport || 0) / 100;
+                const tc = parseNum(form.tramCost) || 0;
+                const dy = parseNum(form.depreciationPeriod) || 1;
+                const eg = bt / rt;
+                const akd = cur.kmPerTramPerDay * (1 + eg);
+                const rf = akd > 0 ? tot / (akd * 365) : 0;
+                const fr = fs - rf;
+                const frp = fs > 0 ? (fr / fs) * 100 : 0;
+                const fcs = fr * tc;
+                const asc = tot > 0 ? ((sp * (1 + as) * ss * 12) / tot) - ((sp * ss * 12) / tot) : 0;
+                const de = parseNum(impact.driverElimination || 0) / 100;
+                const rdc = cur.driverCostPerKm * (1 - de);
+                const umr = parseNum(impact.maintenanceReduction || 0) / 100;
+                const fmr = frp / 100;
+                const tmr = umr + fmr;
+                const mc = cur.maintenanceCostPerKm * (1 - tmr);
+                const rsc = tot > 0 ? (rf * tc) / (tot * dy) : 0;
+                const ec = cur.energyCostPerKm * (1 - (parseNum(impact.energyReduction || 0) / 100));
+                const ac = cur.accidentCostPerKm * (1 - (parseNum(impact.accidentReduction || 0) / 100));
+                const ic = cur.insuranceCostPerKm * (1 - (parseNum(impact.insuranceReduction || 0) / 100));
+                const o1 = cur.otherCost1PerKm * (1 + (parseNum(impact.otherCost1Impact || 0) / 100));
+                const o2 = cur.otherCost2PerKm * (1 + (parseNum(impact.otherCost2Impact || 0) / 100));
+                const o3 = cur.otherCost3PerKm * (1 + (parseNum(impact.otherCost3Impact || 0) / 100));
+                const o4 = cur.otherCost4PerKm * (1 + (parseNum(impact.otherCost4Impact || 0) / 100));
+                const o5 = cur.otherCost5PerKm * (1 + (parseNum(impact.otherCost5Impact || 0) / 100));
+                const tak = asc + rdc + mc + rsc + ec + ac + ic + o1 + o2 + o3 + o4 + o5;
+
+                return {
+                    additionalSupportCostPerKm: asc,
+                    residualDriverCost: rdc,
+                    maintenanceCost: mc,
+                    rollingStockCost: rsc,
+                    energyCost: ec,
+                    accidentCost: ac,
+                    insuranceCost: ic,
+                    otherCost1: o1,
+                    otherCost2: o2,
+                    otherCost3: o3,
+                    otherCost4: o4,
+                    otherCost5: o5,
+                    totalAutonomousPerKm: tak,
+                    totalAutonomousAnnual: tak * tot,
+                    efficiencyGain: eg,
+                    autonomousKmPerDay: akd,
+                    requiredFleet: rf,
+                    fleetReduction: fr,
+                    fleetReductionPercent: frp,
+                    fleetCapitalSavings: fcs,
+                    userMaintenanceReduction: umr,
+                    fleetMaintenanceReduction: fmr,
+                    totalMaintenanceReduction: tmr
+                };
+            };
+
+            // Memoize calculations to prevent running on every render
+            const cur = useMemo(() => calcCur(), [form]);
+            const aut = useMemo(() => calcAuto(), [form, impact]);
+            const tot = cur.totalKm;
+            const spk = cur.totalCurrentPerKm - aut.totalAutonomousPerKm;
+            const san = cur.totalCurrentAnnual - aut.totalAutonomousAnnual;
+            const spc = cur.totalCurrentPerKm > 0 ? (spk / cur.totalCurrentPerKm) * 100 : 0;
+
+            const submit = async () => {
+                if (!form.operatorName || !form.contactName || !form.email) {
+                    alert('Please fill in Operator Name, Contact Name, and Email before submitting.');
+                    return;
+                }
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(form.email)) {
+                    alert('Please enter a valid email address.');
+                    return;
+                }
+
+                setLoading(true);
+
+                try {
+                    const p = {
+                        action: edit ? 'update' : 'submit',
+                        submissionId: subId,
+                        ...form,
+                        currentCostPerKm: cur.totalCurrentPerKm,
+                        currentAnnualCost: cur.totalCurrentAnnual,
+                        timestamp: new Date().toISOString()
+                    };
+
+                    const response = await fetch(URL, {
+                        method: 'POST',
+                        body: JSON.stringify(p),
+                        redirect: 'follow'
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok && data.status === 'success') {
+                        setPage('thankyou');
+                    } else {
+                        console.error('Server error:', data);
+                        alert('Error: ' + (data.message || 'Unable to submit data. Please check the console for details.'));
+                    }
+                } catch (e) {
+                    console.error('Submission error:', e);
+                    alert('Network error: ' + e.message + '\n\nPlease check:\n1. Is the Google Apps Script URL correct?\n2. Is the script deployed with "Anyone" access?\n3. Check browser console (F12) for details.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const saveResults = async () => {
+                setLoading(true);
+
+                try {
+                    const p = {
+                        action: edit ? 'update' : 'submit',
+                        submissionId: subId,
+                        ...form,
+                        ...impact,
+                        currentCostPerKm: cur.totalCurrentPerKm,
+                        currentAnnualCost: cur.totalCurrentAnnual,
+                        autonomousCostPerKm: aut.totalAutonomousPerKm,
+                        autonomousAnnualCost: aut.totalAutonomousAnnual,
+                        savingsPerKm: spk,
+                        savingsAnnual: san,
+                        savingsPercent: spc,
+                        fleetReduction: aut.fleetReduction,
+                        fleetSavings: aut.fleetCapitalSavings,
+                        requiredFleet: aut.requiredFleet,
+                        efficiencyGain: aut.efficiencyGain,
+                        timestamp: new Date().toISOString()
+                    };
+
+                    const response = await fetch(URL, {
+                        method: 'POST',
+                        body: JSON.stringify(p),
+                        redirect: 'follow'
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok && data.status === 'success') {
+                        setSaved(true);
+                    } else {
+                        console.error('Server error:', data);
+                        alert('Error: ' + (data.message || 'Unable to save results. Please check the console for details.'));
+                    }
+                } catch (e) {
+                    console.error('Save error:', e);
+                    alert('Network error: ' + e.message + '\n\nPlease verify your Google Apps Script is properly configured.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const loadSubs = async () => {
+                setLoading(true);
+                try {
+                    const r = await fetch(`${URL}?action=getSubmissions`);
+                    const d = await r.json();
+                    setSubs(d.submissions || []);
+                } catch (e) {
+                    console.error(e);
+                }
+                setLoading(false);
+            };
+
+            const hMasterPass = () => {
+                if (masterPass === PASS) {
+                    setMasterAuth(true);
+                    setMasterErr(false);
+                    loadSubs();
+                } else {
+                    setMasterErr(true);
+                }
+            };
+
+            const loadSub = s => {
+                setForm({
+                    operatorName: s.operatorName || '',
+                    currency: s.currency || 'EUR',
+                    contactName: s.contactName || '',
+                    email: s.email || '',
+                    phone: s.phone || '',
+                    annualBudget: s.annualBudget || '',
+                    OEM: s.OEM || '',
+                    totalDrivers: s.totalDrivers || '0',
+                    avgDriverSalary: s.avgDriverSalary || '0',
+                    driverTrainingCost: s.driverTrainingCost || '0',
+                    absenteeismRate: s.absenteeismRate || '0',
+                    supportPersonnel: s.supportPersonnel || '0',
+                    supportSalary: s.supportSalary || '0',
+                    fleetSize: s.fleetSize || '0',
+                    avgKmPerVehicle: s.avgKmPerVehicle || '0',
+                    avgSpeed: s.avgSpeed || '0',
+                    avgRouteTime: s.avgRouteTime || '0',
+                    driverBreakTime: s.driverBreakTime || '0',
+                    networkLength: s.networkLength || '0',
+                    avgLineLength: s.avgLineLength || '0',
+                    tramCost: s.tramCost || '0',
+                    depreciationPeriod: s.depreciationPeriod || '0',
+                    maintenanceCostPercent: s.maintenanceCostPercent || '0',
+                    energyCost: s.energyCost || '',
+                    energyConsumption: s.energyConsumption || '',
+                    insuranceCosts: s.insuranceCosts || '0',
+                    annualAccidents: s.annualAccidents || '0',
+                    accidentCost: s.accidentCost || '0',
+                    placesKm: s.placesKm || '0',
+                    otherCost1Name: s.otherCost1Name || '',
+                    otherCost1Amount: s.otherCost1Amount || '0',
+                    otherCost2Name: s.otherCost2Name || '',
+                    otherCost2Amount: s.otherCost2Amount || '0',
+                    otherCost3Name: s.otherCost3Name || '',
+                    otherCost3Amount: s.otherCost3Amount || '0',
+                    otherCost4Name: s.otherCost4Name || '',
+                    otherCost4Amount: s.otherCost4Amount || '0',
+                    otherCost5Name: s.otherCost5Name || '',
+                    otherCost5Amount: s.otherCost5Amount || '0'
+                });
+                setSubId(s.submissionId);
+                setEdit(true);
+                setPage('input');
+            };
+
+            const Chart = ({ data, cpk, title }) => {
+                const t = data.reduce((s, i) => s + i.value, 0);
+                if (t === 0) return null;
+                let ca = -90;
+                const sl = data.map(i => {
+                    const p = (i.value / t) * 100;
+                    const a = (p / 100) * 360;
+                    const sa = ca;
+                    const ea = ca + a;
+                    const sr = (sa * Math.PI) / 180;
+                    const er = (ea * Math.PI) / 180;
+                    const x1 = 100 + 90 * Math.cos(sr);
+                    const y1 = 100 + 90 * Math.sin(sr);
+                    const x2 = 100 + 90 * Math.cos(er);
+                    const y2 = 100 + 90 * Math.sin(er);
+                    const la = a > 180 ? 1 : 0;
+                    const pt = [
+                        `M 100 100`,
+                        `L ${x1} ${y1}`,
+                        `A 90 90 0 ${la} 1 ${x2} ${y2}`,
+                        'Z'
+                    ].join(' ');
+                    ca = ea;
+                    return { path: pt, color: i.color, label: i.label, value: i.value };
+                });
+
+                return (
+                    <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+                        {title && <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: '#374151' }}>{title}</h3>}
+                        <svg viewBox="0 0 200 200" style={{ width: '280px', height: '280px', margin: '0 auto' }}>
+                            {sl.map((s, i) => <path key={i} d={s.path} fill={s.color} />)}
+                            <circle cx="100" cy="100" r="60" fill="#1C485C" />
+                            <text x="100" y="95" textAnchor="middle" style={{ fontSize: '24px', fontWeight: 'bold', fill: '#3B82F6' }}>
+                                {currencySymbol}{cpk.toFixed(2)}
+                            </text>
+                            <text x="100" y="115" textAnchor="middle" style={{ fontSize: '11px', fill: '#9CA3AF' }}>
+                                Cost per km
+                            </text>
+                        </svg>
+                        <div style={{ marginTop: '16px', textAlign: 'left', maxWidth: '280px', margin: '16px auto 0' }}>
+                            {sl.map((s, i) => (
+                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '13px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div style={{ width: '12px', height: '12px', backgroundColor: s.color, borderRadius: '2px' }}></div>
+                                        <span>{s.label}</span>
+                                    </div>
+                                    <span style={{ fontWeight: '500' }}>{currencySymbol}{s.value.toFixed(2)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            };
+
+            // Memoize chart data to prevent unnecessary re-renders
+            const ccd = useMemo(() => [
+                { label: 'Driver Costs', value: cur.driverCostPerKm, color: '#EAB308' },
+                { label: 'Maintenance', value: cur.maintenanceCostPerKm, color: '#14B8A6' },
+                { label: 'Rolling Stock', value: cur.rollingStockCostPerKm, color: '#8B5CF6' },
+                { label: 'Energy', value: cur.energyCostPerKm, color: '#93C5FD' },
+                { label: 'Accidents', value: cur.accidentCostPerKm, color: '#FB923C' },
+                { label: 'Insurance', value: cur.insuranceCostPerKm, color: '#86EFAC' },
+                { label: 'Other Costs', value: cur.otherCost1PerKm + cur.otherCost2PerKm + cur.otherCost3PerKm + cur.otherCost4PerKm + cur.otherCost5PerKm, color: '#EF4444' }
+            ].filter(i => i.value > 0), [cur]);
+
+            const acd = useMemo(() => [
+                { label: 'Additional Support', value: aut.additionalSupportCostPerKm, color: '#FBBF24' },
+                { label: 'Residual Drivers', value: aut.residualDriverCost, color: '#FDE047' },
+                { label: 'Maintenance', value: aut.maintenanceCost, color: '#14B8A6' },
+                { label: 'Rolling Stock', value: aut.rollingStockCost, color: '#8B5CF6' },
+                { label: 'Energy', value: aut.energyCost, color: '#93C5FD' },
+                { label: 'Accidents', value: aut.accidentCost, color: '#FB923C' },
+                { label: 'Insurance', value: aut.insuranceCost, color: '#86EFAC' },
+                { label: 'Other Costs', value: aut.otherCost1 + aut.otherCost2 + aut.otherCost3 + aut.otherCost4 + aut.otherCost5, color: '#EF4444' }
+            ].filter(i => i.value > 0), [aut]);
+
+            const inp = {
+                width: '100%',
+                padding: '10px 14px',
+                border: '1px solid #D1D5DB',
+                borderRadius: '8px',
+                fontSize: '15px',
+                transition: 'border-color 0.2s, box-shadow 0.2s',
+                outline: 'none'
+            };
+            const sec = {
+                marginBottom: '40px',
+                padding: '32px',
+                borderRadius: '12px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+            };
+            const lbl = {
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '600',
+                marginBottom: '6px',
+                color: '#374151'
+            };
+            const grd = {
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: '20px',
+                marginTop: '20px'
+            };
+            const sectionHeader = {
+                fontSize: '18px',
+                fontWeight: '700',
+                marginBottom: '24px',
+                paddingBottom: '12px',
+                borderBottom: '2px solid rgba(0,0,0,0.1)',
+                letterSpacing: '-0.3px'
+            };
+            const fieldContainer = {
+                marginBottom: '16px'
+            };
+            const helpText = {
+                fontSize: '12px',
+                color: '#6B7280',
+                marginTop: '4px',
+                fontStyle: 'italic'
+            };
+
+            return (
+                <div style={{ backgroundColor: '#F9FAFB', minHeight: '100vh' }}>
+                    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 24px' }}>
+                        <div style={{
+                            marginBottom: '48px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: '20px',
+                            padding: '24px 32px',
+                            backgroundColor: 'white',
+                            borderRadius: '12px',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+                        }}>
+                            <h1 style={{
+                                fontSize: '28px',
+                                fontWeight: '700',
+                                color: '#1C455B',
+                                margin: 0,
+                                letterSpacing: '-0.5px'
+                            }}>
+                                OTIV Autonomous Tram Calculator
+                            </h1>
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <button
+                                    onClick={() => { setPage('input'); setEdit(false); setSubId(null); }}
+                                    style={{
+                                        padding: '10px 20px',
+                                        backgroundColor: page === 'input' ? '#2563EB' : '#F3F4F6',
+                                        color: page === 'input' ? 'white' : '#374151',
+                                        borderRadius: '8px',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontWeight: '600',
+                                        fontSize: '14px',
+                                        transition: 'all 0.2s',
+                                        boxShadow: page === 'input' ? '0 2px 4px rgba(37,99,235,0.2)' : 'none'
+                                    }}
+                                >
+                                    Input
+                                </button>
+                                <button
+                                    onClick={() => setPage('master')}
+                                    style={{
+                                        padding: '10px 20px',
+                                        backgroundColor: page === 'master' ? '#2563EB' : '#F3F4F6',
+                                        color: page === 'master' ? 'white' : '#374151',
+                                        borderRadius: '8px',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontWeight: '600',
+                                        fontSize: '14px',
+                                        transition: 'all 0.2s',
+                                        boxShadow: page === 'master' ? '0 2px 4px rgba(37,99,235,0.2)' : 'none'
+                                    }}
+                                >
+                                    Master
+                                </button>
+                            </div>
+                        </div>
+
+                        {page === 'input' && (
+                            <>
+                                <div style={{ ...sec, backgroundColor: '#EFF6FF' }}>
+                                    <h2 style={{ ...sectionHeader, color: '#1E3A8A' }}>
+                                        📋 Contact Information
+                                    </h2>
+                                    <div style={grd}>
+                                        <div>
+                                            <label style={lbl}>Operator Name *</label>
+                                            <input type="text" name="operatorName" value={form.operatorName} onChange={hChange} required style={inp} />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Contact Name *</label>
+                                            <input type="text" name="contactName" value={form.contactName} onChange={hChange} required style={inp} />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Email *</label>
+                                            <input type="email" name="email" value={form.email} onChange={hChange} required style={inp} />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Phone Number *</label>
+                                            <input type="tel" name="phone" value={form.phone} onChange={hChange} required style={inp} />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Currency *</label>
+                                            <select name="currency" value={form.currency} onChange={hChange} required style={inp}>
+                                                <optgroup label="European Currencies">
+                                                    <option value="EUR">EUR - Euro</option>
+                                                    <option value="GBP">GBP - British Pound</option>
+                                                    <option value="CHF">CHF - Swiss Franc</option>
+                                                    <option value="SEK">SEK - Swedish Krona</option>
+                                                    <option value="NOK">NOK - Norwegian Krone</option>
+                                                    <option value="DKK">DKK - Danish Krone</option>
+                                                    <option value="PLN">PLN - Polish Złoty</option>
+                                                    <option value="CZK">CZK - Czech Koruna</option>
+                                                    <option value="HUF">HUF - Hungarian Forint</option>
+                                                    <option value="RON">RON - Romanian Leu</option>
+                                                    <option value="BGN">BGN - Bulgarian Lev</option>
+                                                    <option value="HRK">HRK - Croatian Kuna</option>
+                                                    <option value="ISK">ISK - Icelandic Króna</option>
+                                                    <option value="TRY">TRY - Turkish Lira</option>
+                                                </optgroup>
+                                                <optgroup label="American Currencies">
+                                                    <option value="USD">USD - US Dollar</option>
+                                                    <option value="CAD">CAD - Canadian Dollar</option>
+                                                    <option value="MXN">MXN - Mexican Peso</option>
+                                                    <option value="BRL">BRL - Brazilian Real</option>
+                                                    <option value="ARS">ARS - Argentine Peso</option>
+                                                    <option value="CLP">CLP - Chilean Peso</option>
+                                                    <option value="COP">COP - Colombian Peso</option>
+                                                    <option value="PEN">PEN - Peruvian Sol</option>
+                                                    <option value="UYU">UYU - Uruguayan Peso</option>
+                                                    <option value="BOB">BOB - Bolivian Boliviano</option>
+                                                </optgroup>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ ...sec, backgroundColor: '#E3E3E3' }}>
+                                    <h2 style={{ ...sectionHeader, color: '#065F46' }}>
+                                        🚊 Fleet & Operations Data
+                                    </h2>
+                                    <div style={grd}>
+                                        <div>
+                                            <label style={lbl}>Fleet Size (vehicles)</label>
+                                            <input
+                                                type="text"
+                                                inputMode="numeric"
+                                                name="fleetSize"
+                                                value={form.fleetSize}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Main Tram Manufacturer (OEM)</label>
+                                            <input type="text" name="OEM" value={form.OEM} onChange={hChange} style={inp} />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Avg KM per Vehicle per Year</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="avgKmPerVehicle"
+                                                value={form.avgKmPerVehicle}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Avg Tram Speed (km/h)</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="avgSpeed"
+                                                value={form.avgSpeed}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Avg Route Time (minutes)</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="avgRouteTime"
+                                                value={form.avgRouteTime}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Driver Break Time per Route (min)</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="driverBreakTime"
+                                                value={form.driverBreakTime}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Total Network Length (km)</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="networkLength"
+                                                value={form.networkLength}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Average Line Length (km)</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="avgLineLength"
+                                                value={form.avgLineLength}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ ...sec, backgroundColor: '#FEF3C7' }}>
+                                    <h2 style={{ ...sectionHeader, color: '#92400E' }}>
+                                        👥 Workforce Data
+                                    </h2>
+                                    <div style={grd}>
+                                        <div>
+                                            <label style={lbl}>Total Tram Drivers (FTEs)</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="totalDrivers"
+                                                value={form.totalDrivers}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Avg Driver Monthly Cost ({currencySymbol})</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="avgDriverSalary"
+                                                value={form.avgDriverSalary}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Training Cost per Driver/Year ({currencySymbol})</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="driverTrainingCost"
+                                                value={form.driverTrainingCost}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Absenteeism Rate (%)</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="absenteeismRate"
+                                                value={form.absenteeismRate}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                            <span style={{ fontSize: '12px', color: '#6B7280' }}>e.g., 18 = 18%</span>
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Operational Support Personnel (FTEs)</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="supportPersonnel"
+                                                value={form.supportPersonnel}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                            <span style={{ fontSize: '12px', color: '#6B7280' }}>Controllers, dispatchers</span>
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Operational Support Personnel Monthly Cost ({currencySymbol})</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="supportSalary"
+                                                value={form.supportSalary}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ ...sec, backgroundColor: '#ccdcfb' }}>
+                                    <h2 style={{ ...sectionHeader, color: '#1E3A8A' }}>
+                                        💳 Financial Data
+                                    </h2>
+                                    <div style={grd}>
+                                        <div>
+                                            <label style={lbl}>Tram Acquisition Cost ({currencySymbol})</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="tramCost"
+                                                value={form.tramCost}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Depreciation Period (years)</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="depreciationPeriod"
+                                                value={form.depreciationPeriod}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Maintenance (% of acquisition)</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="maintenanceCostPercent"
+                                                value={form.maintenanceCostPercent}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                            <span style={{ fontSize: '12px', color: '#6B7280' }}>e.g., 5 = 5%</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ ...sec, backgroundColor: '#fbe0cc' }}>
+                                    <h2 style={{ ...sectionHeader, color: '#7C2D12' }}>
+                                        ⚡ Other Operational Data
+                                    </h2>
+                                    <div style={grd}>
+                                        <div>
+                                            <label style={lbl}>Energy Cost ({currencySymbol}/kWh)</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="energyCost"
+                                                value={form.energyCost}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                placeholder="0.17"
+                                                style={inp}
+                                            />
+                                            <span style={{ fontSize: '12px', color: '#6B7280' }}>Default: 0.17</span>
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Energy Consumption (kWh/km)</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="energyConsumption"
+                                                value={form.energyConsumption}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                placeholder="3.82"
+                                                style={inp}
+                                            />
+                                            <span style={{ fontSize: '12px', color: '#6B7280' }}>Default: 3.82</span>
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Annual # of Tram Accidents (Total)</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="annualAccidents"
+                                                value={form.annualAccidents}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Financial Cost per Accident ({currencySymbol})</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="accidentCost"
+                                                value={form.accidentCost}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={lbl}>Annual Insurance ({currencySymbol}/year)</label>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="insuranceCosts"
+                                                value={form.insuranceCosts}
+                                                onChange={hChange}
+                                                onBlur={hBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ ...sec, backgroundColor: '#FEE2E2' }}>
+                                    <h2 style={{ ...sectionHeader, color: '#991B1B' }}>
+                                        💰 Other Costs (Optional)
+                                    </h2>
+                                    <p style={{ fontSize: '14px', color: '#6B7280', marginBottom: '16px' }}>
+                                        Add up to 5 custom cost categories
+                                    </p>
+                                    {[1, 2, 3, 4, 5].map(n => (
+                                        <div key={n} style={{ marginBottom: '24px', padding: '0', borderBottom: '1px solid rgba(0,0,0,0.1)', paddingBottom: '20px' }}>
+                                            <h3 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '16px', color: '#991B1B' }}>Other Cost {n}</h3>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+                                                <div>
+                                                    <label style={{ ...lbl, fontSize: '13px' }}>Name</label>
+                                                    <input
+                                                        type="text"
+                                                        name={`otherCost${n}Name`}
+                                                        value={form[`otherCost${n}Name`]}
+                                                        onChange={hChange}
+                                                        placeholder="e.g., Admin"
+                                                        style={inp}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label style={{ ...lbl, fontSize: '13px' }}>Annual Amount ({currencySymbol})</label>
+                                                    <input
+                                                        type="text"
+                                                        inputMode="decimal"
+                                                        name={`otherCost${n}Amount`}
+                                                        value={form[`otherCost${n}Amount`]}
+                                                        onChange={hChange}
+                                                        onBlur={hBlur}
+                                                        onFocus={hFocus}
+                                                        style={inp}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div style={{ ...sec, padding: '32px', backgroundColor: '#1C485C', color: 'white' }}>
+                                    <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '32px', textAlign: 'center' }}>
+                                        Your Current Operations Cost
+                                    </h2>
+                                    <Chart data={ccd} cpk={cur.totalCurrentPerKm} />
+                                    <div style={{ maxWidth: '600px', margin: '24px auto 0' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #374151', fontSize: '18px', fontWeight: 'bold' }}>
+                                            <span>TOTAL ANNUAL COST:</span>
+                                            <span style={{ color: '#3B82F6' }}>{currencySymbol}{fmtNum(cur.totalCurrentAnnual)}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', marginTop: '8px' }}>
+                                            <span style={{ color: '#9CA3AF' }}>Cost per km:</span>
+                                            <span style={{ color: '#3B82F6', fontWeight: '600' }}>{currencySymbol}{cur.totalCurrentPerKm.toFixed(2)}</span>
+                                        </div>
+                                        <div style={{ textAlign: 'center', color: '#9CA3AF', fontSize: '14px', marginTop: '16px' }}>
+                                            Based on {fmtNum(tot)} km/year
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+                                    <button
+                                        onClick={edit ? () => setPage('output') : submit}
+                                        disabled={loading}
+                                        style={{
+                                            padding: '16px 48px',
+                                            backgroundColor: loading ? '#9CA3AF' : '#2563EB',
+                                            color: 'white',
+                                            fontSize: '18px',
+                                            fontWeight: '600',
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            cursor: loading ? 'not-allowed' : 'pointer',
+                                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                                            opacity: loading ? 0.7 : 1
+                                        }}
+                                        onMouseOver={e => !loading && (e.target.style.backgroundColor = '#1D4ED8')}
+                                        onMouseOut={e => !loading && (e.target.style.backgroundColor = '#2563EB')}
+                                    >
+                                        {loading ? 'Submitting...' : (edit ? 'Measure Impact' : 'Submit Data')}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+
+                        {page === 'thankyou' && (
+                            <div style={{ padding: '48px', textAlign: 'center', backgroundColor: '#F9FAFB', borderRadius: '8px', maxWidth: '600px', margin: '0 auto' }}>
+                                <div style={{ fontSize: '48px', marginBottom: '16px' }}></div>
+                                <h2 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '16px', color: '#1C485C' }}>
+                                    Thank You!
+                                </h2>
+                                <p style={{ fontSize: '18px', color: '#6B7280', marginBottom: '32px' }}>
+                                    Your data has been saved successfully. We'll be in touch soon to discuss your autonomous tram business case.
+                                </p>
+                                <div style={{ marginTop: '32px' }}>
+                                    <a
+                                        href="https://otiv.ai/contact-us"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        style={{
+                                            display: 'inline-block',
+                                            padding: '12px 32px',
+                                            backgroundColor: '#1C455B',
+                                            color: 'white',
+                                            fontSize: '16px',
+                                            fontWeight: '600',
+                                            borderRadius: '8px',
+                                            textDecoration: 'none',
+                                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                                        }}
+                                    >
+                                        Contact OTIV
+                                    </a>
+                                </div>
+                            </div>
+                        )}
+
+                        {page === 'output' && (
+                            <>
+                                <div style={{ marginBottom: '24px', textAlign: 'center' }}>
+                                    <button
+                                        onClick={() => setPage('input')}
+                                        style={{
+                                            padding: '12px 24px',
+                                            backgroundColor: '#6B7280',
+                                            color: 'white',
+                                            fontSize: '16px',
+                                            fontWeight: '600',
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                                        }}
+                                        onMouseOver={e => e.target.style.backgroundColor = '#4B5563'}
+                                        onMouseOut={e => e.target.style.backgroundColor = '#6B7280'}
+                                    >
+                                        ← Back to Edit Data
+                                    </button>
+                                </div>
+
+                                <div style={{ marginBottom: '48px' }}>
+                                    <div style={{ ...sec, backgroundColor: '#F3F4F6' }}>
+                                        <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>
+                                            Driver & Operations Impact
+                                        </h3>
+                                        <div style={grd}>
+                                            <div>
+                                                <label style={lbl}>Driver Elimination (%)</label>
+                                                <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="driverElimination"
+                                                value={impact.driverElimination}
+                                                onChange={hImpact}
+                                                onBlur={hImpactBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                                <span style={{ fontSize: '12px', color: '#6B7280' }}>100 = 100%</span>
+                                            </div>
+                                            <div>
+                                                <label style={lbl}>Additional Support Personnel (%)</label>
+                                                <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="additionalSupport"
+                                                value={impact.additionalSupport}
+                                                onChange={hImpact}
+                                                onBlur={hImpactBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                                <span style={{ fontSize: '12px', color: '#6B7280' }}>15 = 15% more</span>
+                                            </div>
+                                            <div>
+                                                <label style={lbl}>Break Time Eliminated (min)</label>
+                                                <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="breakTimeEliminated"
+                                                value={impact.breakTimeEliminated}
+                                                onChange={hImpact}
+                                                onBlur={hImpactBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                                <span style={{ fontSize: '12px', color: '#6B7280' }}>
+                                                    Mandatory break time for drivers between routes that can be eliminated with autonomous operation (Max: {form.driverBreakTime} min)
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#DBEAFE', borderRadius: '6px' }}>
+                                            <p style={{ fontSize: '14px', color: '#1E40AF', margin: 0 }}>
+                                                <strong>Efficiency Gain:</strong> {(aut.efficiencyGain * 100).toFixed(1)}% (break/route time)
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div style={{ ...sec, backgroundColor: '#F3F4F6' }}>
+                                        <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px' }}>
+                                            Cost Reduction Assumptions
+                                        </h3>
+                                        <div style={grd}>
+                                            <div>
+                                                <label style={lbl}>Energy Reduction (%)</label>
+                                                <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="energyReduction"
+                                                value={impact.energyReduction}
+                                                onChange={hImpact}
+                                                onBlur={hImpactBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                            </div>
+                                            <div>
+                                                <label style={lbl}>Maintenance Reduction (%)</label>
+                                                <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="maintenanceReduction"
+                                                value={impact.maintenanceReduction}
+                                                onChange={hImpact}
+                                                onBlur={hImpactBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                                <span style={{ fontSize: '12px', color: '#6B7280' }}>
+                                                    Additional reduction from fleet optimization: {aut.fleetReductionPercent.toFixed(1)}%
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <label style={lbl}>Accident Reduction (%)</label>
+                                                <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="accidentReduction"
+                                                value={impact.accidentReduction}
+                                                onChange={hImpact}
+                                                onBlur={hImpactBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                            </div>
+                                            <div>
+                                                <label style={lbl}>Insurance Reduction (%)</label>
+                                                <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="insuranceReduction"
+                                                value={impact.insuranceReduction}
+                                                onChange={hImpact}
+                                                onBlur={hImpactBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                            </div>
+                                        </div>
+                                        <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#DBEAFE', borderRadius: '6px' }}>
+                                            <p style={{ fontSize: '14px', color: '#1E40AF', margin: 0 }}>
+                                                <strong>Total Maintenance Reduction:</strong> {(aut.totalMaintenanceReduction * 100).toFixed(1)}%
+                                                (User: {(aut.userMaintenanceReduction * 100).toFixed(1)}% + Fleet optimization: {aut.fleetReductionPercent.toFixed(1)}%)
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {(form.otherCost1Name || form.otherCost2Name || form.otherCost3Name || form.otherCost4Name || form.otherCost5Name) && (
+                                        <div style={{ ...sec, backgroundColor: 'white' }}>
+                                            <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px', color: '#991B1B' }}>
+                                                Other Costs Impact
+                                            </h3>
+                                            <div style={grd}>
+                                                {form.otherCost1Name && (
+                                                    <div>
+                                                        <label style={lbl}>{form.otherCost1Name} Impact (%)</label>
+                                                        <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="otherCost1Impact"
+                                                value={impact.otherCost1Impact}
+                                                onChange={hImpact}
+                                                onBlur={hImpactBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                                        <span style={{ fontSize: '12px', color: '#6B7280' }}>-20=-20%, 15=+15%</span>
+                                                    </div>
+                                                )}
+                                                {form.otherCost2Name && (
+                                                    <div>
+                                                        <label style={lbl}>{form.otherCost2Name} Impact (%)</label>
+                                                        <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="otherCost2Impact"
+                                                value={impact.otherCost2Impact}
+                                                onChange={hImpact}
+                                                onBlur={hImpactBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                                        <span style={{ fontSize: '12px', color: '#6B7280' }}>-20=-20%, 15=+15%</span>
+                                                    </div>
+                                                )}
+                                                {form.otherCost3Name && (
+                                                    <div>
+                                                        <label style={lbl}>{form.otherCost3Name} Impact (%)</label>
+                                                        <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="otherCost3Impact"
+                                                value={impact.otherCost3Impact}
+                                                onChange={hImpact}
+                                                onBlur={hImpactBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                                        <span style={{ fontSize: '12px', color: '#6B7280' }}>-20=-20%, 15=+15%</span>
+                                                    </div>
+                                                )}
+                                                {form.otherCost4Name && (
+                                                    <div>
+                                                        <label style={lbl}>{form.otherCost4Name} Impact (%)</label>
+                                                        <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="otherCost4Impact"
+                                                value={impact.otherCost4Impact}
+                                                onChange={hImpact}
+                                                onBlur={hImpactBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                                        <span style={{ fontSize: '12px', color: '#6B7280' }}>-20=-20%, 15=+15%</span>
+                                                    </div>
+                                                )}
+                                                {form.otherCost5Name && (
+                                                    <div>
+                                                        <label style={lbl}>{form.otherCost5Name} Impact (%)</label>
+                                                        <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                name="otherCost5Impact"
+                                                value={impact.otherCost5Impact}
+                                                onChange={hImpact}
+                                                onBlur={hImpactBlur}
+                                                onFocus={hFocus}
+                                                style={inp}
+                                            />
+                                                        <span style={{ fontSize: '12px', color: '#6B7280' }}>-20=-20%, 15=+15%</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div style={{ ...sec, backgroundColor: '#F0FDF4' }}>
+                                        <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px', color: '#065F46' }}>
+                                            Fleet Optimization Results
+                                        </h3>
+                                        <div style={grd}>
+                                            <div style={{ padding: '16px', backgroundColor: 'white', borderRadius: '6px' }}>
+                                                <div style={{ fontSize: '13px', color: '#6B7280', marginBottom: '4px' }}>Current Fleet</div>
+                                                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#1C485C' }}>
+                                                    {parseFloat(form.fleetSize).toFixed(0)}
+                                                </div>
+                                                <div style={{ fontSize: '12px', color: '#9CA3AF' }}>vehicles</div>
+                                            </div>
+                                            <div style={{ padding: '16px', backgroundColor: 'white', borderRadius: '6px' }}>
+                                                <div style={{ fontSize: '13px', color: '#6B7280', marginBottom: '4px' }}>Required Fleet</div>
+                                                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
+                                                    {aut.requiredFleet.toFixed(0)}
+                                                </div>
+                                                <div style={{ fontSize: '12px', color: '#9CA3AF' }}>vehicles</div>
+                                            </div>
+                                            <div style={{ padding: '16px', backgroundColor: 'white', borderRadius: '6px' }}>
+                                                <div style={{ fontSize: '13px', color: '#6B7280', marginBottom: '4px' }}>Fleet Reduction</div>
+                                                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#DC2626' }}>
+                                                    {aut.fleetReduction.toFixed(0)}
+                                                </div>
+                                                <div style={{ fontSize: '12px', color: '#9CA3AF' }}>
+                                                    vehicles (-{aut.fleetReductionPercent.toFixed(1)}%)
+                                                </div>
+                                            </div>
+                                            <div style={{ padding: '16px', backgroundColor: 'white', borderRadius: '6px' }}>
+                                                <div style={{ fontSize: '13px', color: '#6B7280', marginBottom: '4px' }}>Fleet Savings</div>
+                                                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>
+                                                    {currencySymbol}{(aut.fleetCapitalSavings / 1000000).toFixed(1)}M
+                                                </div>
+                                                <div style={{ fontSize: '12px', color: '#9CA3AF' }}>one-time capital</div>
+                                            </div>
+                                        </div>
+                                        <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#D1FAE5', borderRadius: '6px' }}>
+                                            <p style={{ fontSize: '14px', color: '#065F46', margin: 0 }}>
+                                                <strong>Additional Benefit:</strong> Fewer vehicles = {aut.fleetReductionPercent.toFixed(1)}% lower maintenance costs automatically
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ ...sec, padding: '32px', backgroundColor: '#1C485C', color: 'white' }}>
+                                    <h2 style={{ fontSize: '32px', fontWeight: 'bold', marginBottom: '32px', textAlign: 'center' }}>
+                                        Business Case: Current vs Autonomous
+                                    </h2>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginBottom: '32px' }}>
+                                        <Chart data={ccd} cpk={cur.totalCurrentPerKm} title="Current Operations" />
+                                        <Chart data={acd} cpk={aut.totalAutonomousPerKm} title="Autonomous Operations" />
+                                    </div>
+                                    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '32px', backgroundColor: 'white', color: '#1C485C', borderRadius: '8px' }}>
+                                        <h3 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px', textAlign: 'center' }}>
+                                            Total Savings
+                                        </h3>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '20px', textAlign: 'center' }}>
+                                            <div>
+                                                <div style={{ fontSize: '14px', color: '#92400E', marginBottom: '8px' }}>
+                                                    Current Total Costs
+                                                </div>
+                                                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#6B7280' }}>
+                                                    {currencySymbol}{(cur.totalCurrentAnnual / 1000000).toFixed(1)}M
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: '14px', color: '#92400E', marginBottom: '8px' }}>
+                                                    Savings per Kilometer
+                                                </div>
+                                                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#B45309' }}>
+                                                    {currencySymbol}{spk.toFixed(2)}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: '14px', color: '#92400E', marginBottom: '8px' }}>
+                                                    Annual Savings
+                                                </div>
+                                                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#B45309' }}>
+                                                    {currencySymbol}{(san / 1000000).toFixed(1)}M
+                                                </div>
+                                                <div style={{ fontSize: '12px', color: '#92400E', marginTop: '4px' }}>
+                                                    + {currencySymbol}{(aut.fleetCapitalSavings / 1000000).toFixed(1)}M fleet savings
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: '14px', color: '#92400E', marginBottom: '8px' }}>
+                                                    Reduction
+                                                </div>
+                                                <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#B45309' }}>
+                                                    {spc.toFixed(1)}%
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ textAlign: 'center', marginTop: '48px', padding: '32px', backgroundColor: '#F9FAFB', borderRadius: '8px' }}>
+                                    <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '16px', color: '#1C485C' }}>
+                                        Save Your Results
+                                    </h3>
+                                    <p style={{ fontSize: '16px', color: '#6B7280', marginBottom: '24px' }}>
+                                        Click below to save your complete business case analysis
+                                    </p>
+                                    {saved ? (
+                                        <div style={{ padding: '16px', backgroundColor: '#D1FAE5', borderRadius: '8px' }}>
+                                            <p style={{ fontSize: '16px', color: '#065F46', margin: 0 }}>
+                                                 ✅ Results saved successfully!
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            onClick={saveResults}
+                                            style={{
+                                                padding: '16px 48px',
+                                                backgroundColor: '#059669',
+                                                color: 'white',
+                                                fontSize: '18px',
+                                                fontWeight: '600',
+                                                borderRadius: '8px',
+                                                border: 'none',
+                                                cursor: 'pointer',
+                                                boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                                            }}
+                                            onMouseOver={e => e.target.style.backgroundColor = '#047857'}
+                                            onMouseOut={e => e.target.style.backgroundColor = '#059669'}
+                                        >
+                                            Save Data
+                                        </button>
+                                    )}
+                                </div>
+                            </>
+                        )}
+
+                        {page === 'master' && !masterAuth && (
+                            <div style={{ padding: '48px', textAlign: 'center', backgroundColor: '#F9FAFB', borderRadius: '8px', maxWidth: '600px', margin: '0 auto' }}>
+                                <h2 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '16px', color: '#1C485C' }}>
+                                    Master Access
+                                </h2>
+                                <p style={{ fontSize: '16px', color: '#6B7280', marginBottom: '24px' }}>
+                                    Enter the master password to view all submissions:
+                                </p>
+                                <input
+                                    type="password"
+                                    value={masterPass}
+                                    onChange={e => setMasterPass(e.target.value)}
+                                    onKeyPress={e => e.key === 'Enter' && hMasterPass()}
+                                    placeholder="Enter master password"
+                                    style={{
+                                        width: '100%',
+                                        maxWidth: '300px',
+                                        padding: '12px 16px',
+                                        border: masterErr ? '2px solid #EF4444' : '2px solid #3B82F6',
+                                        borderRadius: '6px',
+                                        fontSize: '16px',
+                                        marginBottom: '16px',
+                                        textAlign: 'center'
+                                    }}
+                                />
+                                {masterErr && (
+                                    <p style={{ color: '#EF4444', fontSize: '14px', marginBottom: '16px' }}>
+                                        Incorrect password.
+                                    </p>
+                                )}
+                                <button
+                                    onClick={hMasterPass}
+                                    style={{
+                                        padding: '12px 32px',
+                                        backgroundColor: '#2563EB',
+                                        color: 'white',
+                                        fontSize: '16px',
+                                        fontWeight: '600',
+                                        borderRadius: '6px',
+                                        border: 'none',
+                                        cursor: 'pointer'
+                                    }}
+                                    onMouseOver={e => e.target.style.backgroundColor = '#1D4ED8'}
+                                    onMouseOut={e => e.target.style.backgroundColor = '#2563EB'}
+                                >
+                                    Access Master View
+                                </button>
+                            </div>
+                        )}
+
+                        {page === 'master' && masterAuth && (
+                            <div style={{ ...sec, backgroundColor: '#F9FAFB' }}>
+                                <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px', color: '#1C485C' }}>
+                                    All Submissions
+                                </h2>
+                                {loading ? (
+                                    <div style={{ textAlign: 'center', padding: '32px' }}>
+                                        <p style={{ fontSize: '16px', color: '#6B7280' }}>Loading submissions...</p>
+                                    </div>
+                                ) : subs.length === 0 ? (
+                                    <div style={{ textAlign: 'center', padding: '32px' }}>
+                                        <p style={{ fontSize: '16px', color: '#6B7280' }}>No submissions yet.</p>
+                                    </div>
+                                ) : (
+                                    <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #D1D5DB', borderRadius: '8px', backgroundColor: 'white' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                            <thead style={{ backgroundColor: '#F3F4F6', position: 'sticky', top: 0 }}>
+                                                <tr>
+                                                    <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #D1D5DB', fontWeight: '600', fontSize: '14px' }}>
+                                                        Timestamp
+                                                    </th>
+                                                    <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #D1D5DB', fontWeight: '600', fontSize: '14px' }}>
+                                                        Operator Name
+                                                    </th>
+                                                    <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #D1D5DB', fontWeight: '600', fontSize: '14px' }}>
+                                                        Contact Name
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {subs.map((s, i) => (
+                                                    <tr
+                                                        key={i}
+                                                        onDoubleClick={() => loadSub(s)}
+                                                        style={{ cursor: 'pointer', backgroundColor: i % 2 === 0 ? 'white' : '#F9FAFB' }}
+                                                        onMouseOver={e => e.currentTarget.style.backgroundColor = '#EFF6FF'}
+                                                        onMouseOut={e => e.currentTarget.style.backgroundColor = i % 2 === 0 ? 'white' : '#F9FAFB'}
+                                                    >
+                                                        <td style={{ padding: '12px', borderBottom: '1px solid #E5E7EB', fontSize: '14px' }}>
+                                                            {s.timestamp}
+                                                        </td>
+                                                        <td style={{ padding: '12px', borderBottom: '1px solid #E5E7EB', fontSize: '14px' }}>
+                                                            {s.operatorName}
+                                                        </td>
+                                                        <td style={{ padding: '12px', borderBottom: '1px solid #E5E7EB', fontSize: '14px' }}>
+                                                            {s.contactName}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                                <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#DBEAFE', borderRadius: '6px' }}>
+                                    <p style={{ fontSize: '14px', color: '#1E40AF', margin: 0 }}>
+                                        <strong>Tip:</strong> Double-click any row to load that submission into the calculator.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('otiv-calculator-root'));
+    </script>
+</body>
+</html>
