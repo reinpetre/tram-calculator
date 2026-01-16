@@ -1681,5 +1681,24 @@
 
         ReactDOM.render(<App />, document.getElementById('otiv-calculator-root'));
     </script>
+    <script>
+        // Send height to parent window for iframe auto-resize
+        function sendHeight() {
+            const height = document.body.scrollHeight;
+            window.parent.postMessage({ height: height }, '*');
+        }
+
+        // Send initial height
+        window.addEventListener('load', function() {
+            setTimeout(sendHeight, 500);
+        });
+
+        // Send height when content changes
+        const observer = new MutationObserver(sendHeight);
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        // Send height on window resize
+        window.addEventListener('resize', sendHeight);
+    </script>
 </body>
 </html>
